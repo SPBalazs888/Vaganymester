@@ -91,7 +91,7 @@
                             <ColumnDefinition Width="Auto"/>
                         </Grid.ColumnDefinitions>
                         <TextBlock Text="ÉLŐ VÁGÁNYRAJZ" FontWeight="Bold" FontSize="15"/>
-                        <TextBlock Grid.Column="1" Text="Kattints a jelzőre, váltóra vagy vonatra!" Foreground="#85A3B6" FontSize="12"/>
+                        <TextBlock Grid.Column="1" Text="Kattints egy vonatra az utastér megnyitásához!" Foreground="#85A3B6" FontSize="12"/>
                     </Grid>
 
                     <Viewbox Grid.Row="1" Stretch="Uniform" HorizontalAlignment="Stretch" VerticalAlignment="Center">
@@ -281,7 +281,7 @@
                         <ScrollViewer VerticalScrollBarVisibility="Auto">
                             <StackPanel Margin="12,13">
                                 <TextBlock Text="Kijelölt vonat / mozdonyvezető" FontSize="15" FontWeight="Bold" Margin="0,0,0,8"/>
-                                <ListBox ItemsSource="{Binding Trains}" SelectedItem="{Binding SelectedTrain, Mode=TwoWay}" Height="154">
+                                <ListBox ItemsSource="{Binding Trains}" SelectedItem="{Binding SelectedTrain, Mode=TwoWay}" MouseDoubleClick="TrainList_MouseDoubleClick" Height="154">
                                     <ListBox.ItemTemplate>
                                         <DataTemplate>
                                             <Grid>
@@ -293,6 +293,8 @@
                                         </DataTemplate>
                                     </ListBox.ItemTemplate>
                                 </ListBox>
+                                <Button Content="🚃  Vonat belső nézete / ülésrajz" Click="TrainDetails_Click"
+                                        HorizontalAlignment="Stretch" Margin="2,7" Style="{StaticResource AccentButton}"/>
                                 <Grid Margin="2,12,2,8">
                                     <Grid.ColumnDefinitions><ColumnDefinition Width="112"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
                                     <Grid.RowDefinitions><RowDefinition Height="26"/><RowDefinition Height="26"/><RowDefinition Height="26"/><RowDefinition Height="26"/></Grid.RowDefinitions>
