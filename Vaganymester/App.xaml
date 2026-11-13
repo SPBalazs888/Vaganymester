@@ -1,0 +1,77 @@
+<Application x:Class="Vaganymester.App"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             StartupUri="MainWindow.xaml">
+    <Application.Resources>
+        <SolidColorBrush x:Key="Bg" Color="#0B121B"/>
+        <SolidColorBrush x:Key="Panel" Color="#14212D"/>
+        <SolidColorBrush x:Key="BorderColor" Color="#293D4E"/>
+        <SolidColorBrush x:Key="Ink" Color="#EAF5FC"/>
+        <SolidColorBrush x:Key="Muted" Color="#9BAFBE"/>
+        <SolidColorBrush x:Key="Accent" Color="#4BDFB3"/>
+
+        <Style TargetType="Window">
+            <Setter Property="Background" Value="{StaticResource Bg}"/>
+            <Setter Property="Foreground" Value="{StaticResource Ink}"/>
+            <Setter Property="FontFamily" Value="Segoe UI"/>
+            <Setter Property="FontSize" Value="13"/>
+        </Style>
+        <Style TargetType="TextBlock">
+            <Setter Property="Foreground" Value="{StaticResource Ink}"/>
+        </Style>
+        <Style TargetType="Button">
+            <Setter Property="Background" Value="#203443"/>
+            <Setter Property="Foreground" Value="#F1F8FD"/>
+            <Setter Property="BorderBrush" Value="#385367"/>
+            <Setter Property="Padding" Value="11,7"/>
+            <Setter Property="Margin" Value="3"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+        </Style>
+        <Style x:Key="AccentButton" TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
+            <Setter Property="Background" Value="#087A67"/>
+            <Setter Property="BorderBrush" Value="#29C6A4"/>
+        </Style>
+        <Style x:Key="DangerButton" TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
+            <Setter Property="Background" Value="#80313D"/>
+            <Setter Property="BorderBrush" Value="#D46B72"/>
+        </Style>
+        <Style TargetType="ListBox">
+            <Setter Property="Background" Value="#101D27"/>
+            <Setter Property="Foreground" Value="#EAF5FC"/>
+            <Setter Property="BorderBrush" Value="#354A5B"/>
+            <Setter Property="BorderThickness" Value="1"/>
+        </Style>
+        <Style TargetType="ListBoxItem">
+            <Setter Property="Padding" Value="7,5"/>
+            <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+        </Style>
+        <Style TargetType="TabControl">
+            <Setter Property="Background" Value="#14212D"/>
+            <Setter Property="BorderBrush" Value="#314657"/>
+        </Style>
+        <Style TargetType="TabItem">
+            <Setter Property="Foreground" Value="#14212D"/>
+            <Setter Property="Padding" Value="10,8"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+        </Style>
+        <Style TargetType="CheckBox">
+            <Setter Property="Foreground" Value="#EDF6FD"/>
+            <Setter Property="Margin" Value="3,7"/>
+        </Style>
+        <Style TargetType="DataGrid">
+            <Setter Property="Background" Value="#101D27"/>
+            <Setter Property="Foreground" Value="#ECF6FC"/>
+            <Setter Property="RowBackground" Value="#13222D"/>
+            <Setter Property="AlternatingRowBackground" Value="#1A2A36"/>
+            <Setter Property="GridLinesVisibility" Value="None"/>
+            <Setter Property="BorderBrush" Value="#304756"/>
+            <Setter Property="ColumnHeaderHeight" Value="32"/>
+            <Setter Property="RowHeight" Value="30"/>
+            <Setter Property="CanUserAddRows" Value="False"/>
+            <Setter Property="IsReadOnly" Value="True"/>
+            <Setter Property="AutoGenerateColumns" Value="False"/>
+            <Setter Property="HeadersVisibility" Value="Column"/>
+        </Style>
+    </Application.Resources>
+</Application>
