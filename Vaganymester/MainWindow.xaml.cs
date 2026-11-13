@@ -1,3 +1,4 @@
+using System.Collections.ObjectModel;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
@@ -10,17 +11,21 @@ namespace Vaganymester;
 public partial class MainWindow : Window
 {
     public DispatchEngine Engine { get; } = new();
+    public ObservableCollection<string> NeighborMessages { get; } = new();
     private readonly DispatcherTimer _timer;
     private readonly Dictionary<Train, TrainDetailsWindow> _detailsWindows = new();
     private DateTime _previousTick = DateTime.UtcNow;
     private bool _isFullScreen;
     private Rect _previousWindowBounds;
+    private NeighborCommunicationWindow? _neighborWindow;
 
     public MainWindow()
     {
         InitializeComponent();
         DataContext = Engine;
         _previousWindowBounds = new Rect(Left, Top, Width, Height);
+        NeighborMessages.Add("Állomásközi üzenetek: a szomszédos állomások elérhetők.");
+        AddNeighborCommunicationButton();
 
         _timer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(40) };
         _timer.Tick += (_, _) =>
@@ -28,7 +33,9 @@ public partial class MainWindow : Window
             DateTime now = DateTime.UtcNow;
             double dt = Math.Clamp((now - _previousTick).TotalSeconds, 0, 0.10);
             _previousTick = now;
+            var previousPositions = Engine.Trains.ToDictionary(train => train, train => train.X);
             Engine.Tick(dt);
+            NotifyDepartures(previousPositions);
         };
         Engine.Trains.CollectionChanged += (_, e) =>
         {
@@ -37,6 +44,65 @@ public partial class MainWindow : Window
                 if (_detailsWindows.TryGetValue(oldTrain, out var window)) window.Close();
         };
         _timer.Start();
+    }
+
+    private void AddNeighborCommunicationButton()
+    {
+        if (Content is not Grid root) return;
+        var header = root.Children.OfType<Grid>().FirstOrDefault(grid => Grid.GetRow(grid) == 0);
+        var controls = header?.Children.OfType<StackPanel>()
+            .FirstOrDefault(panel => Grid.GetColumn(panel) == 1);
+        if (controls == null) return;
+
+        controls.Children.Insert(0, new Button
+        {
+            Content = "📨 Állomásközi üzenetek",
+            Margin = new Thickness(0, 0, 8, 0),
+            Padding = new Thickness(10, 5, 10, 5),
+            ToolTip = "Üzenetek megtekintése és küldése a szomszédos állomásoknak",
+            Click = (_, _) => ShowNeighborCommunication()
+        });
+    }
+
+    private void ShowNeighborCommunication()
+    {
+        if (_neighborWindow is { IsVisible: true })
+        {
+            _neighborWindow.Activate();
+            return;
+        }
+
+        _neighborWindow = new NeighborCommunicationWindow(NeighborMessages, AddNeighborMessage)
+        {
+            Owner = this
+        };
+        _neighborWindow.Closed += (_, _) => _neighborWindow = null;
+        _neighborWindow.Show();
+    }
+
+    private void AddNeighborMessage(string message)
+    {
+        if (string.IsNullOrWhiteSpace(message)) return;
+        NeighborMessages.Insert(0, $"{Engine.ClockText} — {message.Trim()}");
+        while (NeighborMessages.Count > 100)
+            NeighborMessages.RemoveAt(NeighborMessages.Count - 1);
+    }
+
+    private void NotifyDepartures(IReadOnlyDictionary<Train, double> previousPositions)
+    {
+        foreach (var (train, oldX) in previousPositions)
+        {
+            if (!Engine.Trains.Contains(train) || train.Track < 0) continue;
+
+            double exitSignalPosition = train.Direction > 0 ? 745 : 430;
+            bool hasPassedExit = train.Direction > 0
+                ? oldX < exitSignalPosition && train.X >= exitSignalPosition
+                : oldX > exitSignalPosition && train.X <= exitSignalPosition;
+            if (!hasPassedExit) continue;
+
+            string direction = train.Direction > 0 ? "kelet" : "nyugat";
+            AddNeighborMessage($"A(z) {train.Number} számú vonat elindult {direction} felé, a(z) {train.Track + 1}. vágányról.");
+        }
     }
 
     private void ToggleFullScreen()
