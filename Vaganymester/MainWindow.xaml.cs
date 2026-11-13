@@ -13,11 +13,14 @@ public partial class MainWindow : Window
     private readonly DispatcherTimer _timer;
     private readonly Dictionary<Train, TrainDetailsWindow> _detailsWindows = new();
     private DateTime _previousTick = DateTime.UtcNow;
+    private bool _isFullScreen;
+    private Rect _previousWindowBounds;
 
     public MainWindow()
     {
         InitializeComponent();
         DataContext = Engine;
+        _previousWindowBounds = new Rect(Left, Top, Width, Height);
 
         _timer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(40) };
         _timer.Tick += (_, _) =>
@@ -34,6 +37,29 @@ public partial class MainWindow : Window
                 if (_detailsWindows.TryGetValue(oldTrain, out var window)) window.Close();
         };
         _timer.Start();
+    }
+
+    private void ToggleFullScreen()
+    {
+        if (_isFullScreen)
+        {
+            WindowStyle = WindowStyle.SingleBorderWindow;
+            ResizeMode = ResizeMode.CanResize;
+            WindowState = WindowState.Normal;
+            Left = _previousWindowBounds.Left;
+            Top = _previousWindowBounds.Top;
+            Width = _previousWindowBounds.Width;
+            Height = _previousWindowBounds.Height;
+            _isFullScreen = false;
+            return;
+        }
+
+        _previousWindowBounds = new Rect(Left, Top, Width, Height);
+
+        WindowStyle = WindowStyle.None;
+        ResizeMode = ResizeMode.NoResize;
+        WindowState = WindowState.Maximized;
+        _isFullScreen = true;
     }
 
     private void PlayPause_Click(object sender, RoutedEventArgs e) => Engine.IsRunning = !Engine.IsRunning;
@@ -138,6 +164,10 @@ public partial class MainWindow : Window
                 break;
             case Key.F9:
                 ResetSimulation();
+                e.Handled = true;
+                break;
+            case Key.F11:
+                ToggleFullScreen();
                 e.Handled = true;
                 break;
         }
