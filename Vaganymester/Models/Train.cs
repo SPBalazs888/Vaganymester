@@ -1,4 +1,5 @@
 using System.Windows.Media;
+using System.Collections.ObjectModel;
 
 namespace Vaganymester.Models;
 
@@ -28,6 +29,19 @@ public sealed class Train : BindableBase
         _ => Brushes.MediumTurquoise
     };
     public string DriverName => Driver.Name;
+
+    // Az utasok és helyfoglalások a vonat életciklusa alatt megmaradnak.
+    public ObservableCollection<TrainCarriage> Carriages { get; } = new();
+    public int SeatCapacity => Carriages.Sum(c => c.Capacity);
+    public int PassengerCount => Carriages.Sum(c => c.Occupied);
+    public int FreeSeats => SeatCapacity - PassengerCount;
+    public string OccupancyText => SeatCapacity == 0 ? "Nincs utastér" : $"{100.0 * PassengerCount / SeatCapacity:0}%";
+    public void NotifyPassengerChanged()
+    {
+        Raise(nameof(SeatCapacity)); Raise(nameof(PassengerCount));
+        Raise(nameof(FreeSeats)); Raise(nameof(OccupancyText));
+    }
+
 
     private double _x;
     public double X { get => _x; set => Set(ref _x, value); }
@@ -95,6 +109,7 @@ public sealed class Train : BindableBase
             TrainType.Teher => 65,
             _ => 82
         };
+        PassengerManifestFactory.Populate(this);
         UpdateLayout();
     }
 

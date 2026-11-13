@@ -70,3 +70,12 @@ Az ütközések **szándékosan előidézhetők** az oktatási modellben. Péld�
 - `Simulation/DispatchEngine.cs` — vágányút-ellenőrzés, vonatmozgás, fékezés, ütközések, menetrend
 
 **Korlátok:** fiktív kétvágányos állomás, egyszerűsített kitérőgeometria és fékmodell, egyetlen vonalirány állomásonként; nincs teljes vasúti blokkbiztosítás, vágányútoldás, fékgörbe vagy szabályzati megfelelőség. A program kizárólag játék és oktatási célra készült, valódi vasúti forgalom irányítására nem használható.
+
+### Új funkció: vonat belső nézete
+
+- A pályarajzon egy vonatra kattintva külön WPF-ablak nyílik. A VONATOK fülön az **Utastér / ülésrajz** gombbal vagy a listán dupla kattintással is megnyitható.
+- Személyvonaton 3, InterCityn 4 személykocsi látszik. Kocsinként A–D ülések, kétoldali üléspárok és középső folyosó található.
+- A foglalt helyek mellett szimulált magyar utasnevek, jegytípusok, valamint a foglalt/szabad helyek száma és az összesített kihasználtság látszik.
+- Egy ülésre kattintva szerkeszthető a rajta lévő utas vagy felszabadítható a hely. Az adatok a vonat objektumában maradnak, az ablak bezárása nem törli őket.
+- A tehervonatnak nincs utastér; ezt a külön ablak jelzi.
+- Az utasnevek automatikusan generált tesztadatok, nem valós utasok.
