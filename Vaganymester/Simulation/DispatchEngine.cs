@@ -74,18 +74,26 @@ public sealed class DispatchEngine : BindableBase
 
     public int ActiveCount => Trains.Count;
 
-    // A négy vágányszakasz foglaltsága élőben megjelenik a biztosítóberendezési térképen.
-    private bool IsBusy(string section) => Trains.Any(t =>
-        Occupies(t, section) || t.PendingSection == section)
-        || Signals.Any(s => s.IsGreen && DestinationFor(s) == section);
-    public string WestSectionLabel => IsBusy("NYUGAT") ? "NYUGATI BLOKK: FOGLALT" : "NYUGATI BLOKK: SZABAD";
-    public string EastSectionLabel => IsBusy("KELET") ? "KELETI BLOKK: FOGLALT" : "KELETI BLOKK: SZABAD";
-    public string Track1SectionLabel => IsBusy("VÁGÁNY 1") ? "1. VÁGÁNY: FOGLALT" : "1. VÁGÁNY: SZABAD";
-    public string Track2SectionLabel => IsBusy("VÁGÁNY 2") ? "2. VÁGÁNY: FOGLALT" : "2. VÁGÁNY: SZABAD";
-    public Brush WestSectionBrush => IsBusy("NYUGAT") ? Brushes.Salmon : Brushes.MediumSpringGreen;
-    public Brush EastSectionBrush => IsBusy("KELET") ? Brushes.Salmon : Brushes.MediumSpringGreen;
-    public Brush Track1SectionBrush => IsBusy("VÁGÁNY 1") ? Brushes.Salmon : Brushes.MediumSpringGreen;
-    public Brush Track2SectionBrush => IsBusy("VÁGÁNY 2") ? Brushes.Salmon : Brushes.MediumSpringGreen;
+    // A vonat által ténylegesen elfoglalt szakasz és a szabad jelzéssel beállított útvonal külön állapot.
+    private bool IsBusy(string section) => Trains.Any(t => Occupies(t, section));
+    private bool IsRouteSet(string section) =>
+        Trains.Any(t => t.PendingSection == section) ||
+        Signals.Any(s => s.IsGreen && DestinationFor(s) == section);
+    private string SectionLabel(string section, string name) => IsBusy(section)
+        ? $"{name}: FOGLALT"
+        : IsRouteSet(section) ? $"{name}: ÚTVONAL BEÁLLÍTVA" : $"{name}: SZABAD";
+    private Brush SectionBrush(string section) => IsBusy(section)
+        ? Brushes.Salmon
+        : IsRouteSet(section) ? Brushes.Goldenrod : Brushes.MediumSpringGreen;
+
+    public string WestSectionLabel => SectionLabel("NYUGAT", "NYUGATI BLOKK");
+    public string EastSectionLabel => SectionLabel("KELET", "KELETI BLOKK");
+    public string Track1SectionLabel => SectionLabel("VÁGÁNY 1", "1. VÁGÁNY");
+    public string Track2SectionLabel => SectionLabel("VÁGÁNY 2", "2. VÁGÁNY");
+    public Brush WestSectionBrush => SectionBrush("NYUGAT");
+    public Brush EastSectionBrush => SectionBrush("KELET");
+    public Brush Track1SectionBrush => SectionBrush("VÁGÁNY 1");
+    public Brush Track2SectionBrush => SectionBrush("VÁGÁNY 2");
 
     private void RefreshSectionIndicators()
     {
@@ -346,6 +354,7 @@ public sealed class DispatchEngine : BindableBase
         }
         signal.IsGreen = green;
         UpdateTurnoutLocks();
+        RefreshSectionIndicators();
         if (green)
         {
             Log($"{signal.Code} szabadra állítva → {DestinationFor(signal)}.", SafetyEnabled ? "success" : "danger");
@@ -547,6 +556,7 @@ public sealed class DispatchEngine : BindableBase
             train.PendingSection = null;
 
         train.UpdateLayout();
+        RefreshSectionIndicators();
         string state = train.ManualHold ? (train.Emergency ? "Vészfékezve" : "Forgalmi utasításra áll")
             : waitingAtRed && train.Speed < 5 ? "Vörös jelzőnél vár" : "Menetben";
         train.Status = state;
