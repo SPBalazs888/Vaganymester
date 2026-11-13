@@ -3,7 +3,8 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Title="VÁGÁNYMESTER | Forgalmi szolgálattevő szimulátor"
         Width="1580" Height="950" MinWidth="1180" MinHeight="760"
-        WindowStartupLocation="CenterScreen" KeyDown="Window_KeyDown">
+        WindowStartupLocation="CenterScreen" KeyDown="Window_KeyDown"
+        Background="{StaticResource Bg}" Foreground="{StaticResource Ink}">
     <Grid Margin="16">
         <Grid.RowDefinitions>
             <RowDefinition Height="70"/>
@@ -45,7 +46,7 @@
             </Grid.ColumnDefinitions>
             <Border Grid.Column="0" Background="#142530" BorderBrush="#2D4654" BorderThickness="1" CornerRadius="9" Margin="0,0,8,0" Padding="14,8">
                 <StackPanel>
-                    <TextBlock Text="AKTÍV VONATOK" Foreground="#9AB4C3" FontSize="11"/>
+                    <TextBlock Text="AKTÍV VONATOK" Foreground="#B6D0DF" FontSize="11"/>
                     <TextBlock Text="{Binding ActiveCount}" FontSize="27" FontWeight="Bold"/>
                 </StackPanel>
             </Border>
@@ -215,21 +216,24 @@
                     </Viewbox>
 
                     <Border Grid.Row="2" Background="#1C303E" CornerRadius="6" Padding="10,9" Margin="0,3,0,10">
-                        <TextBlock Text="{Binding SystemMessage}" Foreground="#D4E8F2" TextWrapping="Wrap" FontSize="12"/>
+                        <StackPanel>
+                            <TextBlock Text="{Binding SystemMessage}" Foreground="#F0F6FC" TextWrapping="Wrap" FontSize="12"/>
+                            <TextBlock Text="{Binding WaitingSummary}" Foreground="#FBC87D" TextWrapping="Wrap" FontSize="12" Margin="0,4,0,0"/>
+                        </StackPanel>
                     </Border>
 
                     <StackPanel Grid.Row="3" Orientation="Horizontal" VerticalAlignment="Center">
                         <TextBlock Text="ÚJ RENDKÍVÜLI VONAT" FontWeight="Bold" Foreground="#A8C3D2" VerticalAlignment="Center" Margin="2,0,12,0"/>
-                        <ComboBox x:Name="DirectionPicker" SelectedIndex="0" Width="140" Margin="0,0,7,0" Background="#E7F0F5">
+                        <ComboBox x:Name="DirectionPicker" SelectedIndex="0" Width="140" Margin="0,0,7,0" Background="#E8F2F8" Foreground="#12283A">
                             <ComboBoxItem Content="Nyugatról érkezik"/>
                             <ComboBoxItem Content="Keletről érkezik"/>
                         </ComboBox>
-                        <ComboBox x:Name="TrainTypePicker" SelectedIndex="0" Width="133" Margin="0,0,7,0" Background="#E7F0F5">
+                        <ComboBox x:Name="TrainTypePicker" SelectedIndex="0" Width="133" Margin="0,0,7,0" Background="#E8F2F8" Foreground="#12283A">
                             <ComboBoxItem Content="Személyvonat"/>
                             <ComboBoxItem Content="InterCity"/>
                             <ComboBoxItem Content="Tehervonat"/>
                         </ComboBox>
-                        <Button Content="+ Vonat indítása" Click="AddTrain_Click" Style="{StaticResource AccentButton}"/>
+                        <Button Content="+ Érkezés kérése" ToolTip="Foglalt vonalnál a járat várólistára kerül." Click="AddTrain_Click" Style="{StaticResource AccentButton}"/>
                     </StackPanel>
                 </Grid>
             </Border>
@@ -349,7 +353,7 @@
                         <ScrollViewer VerticalScrollBarVisibility="Auto">
                             <StackPanel Margin="13" >
                                 <TextBlock Text="Forgalmi szolgálattevő feladata" FontWeight="Bold" FontSize="15" TextWrapping="Wrap" Margin="0,0,0,10"/>
-                                <TextBlock Text="1. A vonatok automatikusan érkeznek a két vonal felől a menetrend szerint." TextWrapping="Wrap" Margin="0,0,0,10"/>
+                                <TextBlock Text="1. A vonatok a nyílt vonalon várnak, amíg felszabadul a belépési oldal; nem spawnolnak a kihaladó szerelvény elé." TextWrapping="Wrap" Margin="0,0,0,10"/>
                                 <TextBlock Text="2. Válaszd ki a nyugati vagy keleti váltó útirányát: 1. vagy 2. vágány." TextWrapping="Wrap" Margin="0,0,0,10"/>
                                 <TextBlock Text="3. Állítsd a megfelelő bejárati jelzőt SZABAD-ra. A vonat önállóan elindul és áthalad." TextWrapping="Wrap" Margin="0,0,0,10"/>
                                 <TextBlock Text="4. Mielőtt elhagyja az állomást, állítsd a kijárati jelzőt is SZABAD-ra, és a kijárati oldalon lévő váltót a megfelelő vágányra." TextWrapping="Wrap" Margin="0,0,0,10"/>
@@ -382,7 +386,7 @@
                             <DataGridTextColumn Header="Vonat" Binding="{Binding Number}" Width="83"/>
                             <DataGridTextColumn Header="Belépés" Binding="{Binding Origin}" Width="75"/>
                             <DataGridTextColumn Header="Cél" Binding="{Binding Destination}" Width="*"/>
-                            <DataGridTextColumn Header="Állapot" Binding="{Binding Status}" Width="118"/>
+                            <DataGridTextColumn Header="Állapot" Binding="{Binding Status}" Width="156"/>
                         </DataGrid.Columns>
                     </DataGrid>
                 </DockPanel>
