@@ -33,9 +33,7 @@ public partial class MainWindow : Window
             DateTime now = DateTime.UtcNow;
             double dt = Math.Clamp((now - _previousTick).TotalSeconds, 0, 0.10);
             _previousTick = now;
-            var previousPositions = Engine.Trains.ToDictionary(train => train, train => train.X);
-            Engine.Tick(dt);
-            NotifyDepartures(previousPositions);
+            AdvanceSimulation(() => Engine.Tick(dt));
         };
         Engine.Trains.CollectionChanged += (_, e) =>
         {
@@ -54,14 +52,15 @@ public partial class MainWindow : Window
             .FirstOrDefault(panel => Grid.GetColumn(panel) == 1);
         if (controls == null) return;
 
-        controls.Children.Insert(0, new Button
+        var button = new Button
         {
             Content = "📨 Állomásközi üzenetek",
             Margin = new Thickness(0, 0, 8, 0),
             Padding = new Thickness(10, 5, 10, 5),
-            ToolTip = "Üzenetek megtekintése és küldése a szomszédos állomásoknak",
-            Click = (_, _) => ShowNeighborCommunication()
-        });
+            ToolTip = "Üzenetek megtekintése és küldése a szomszédos állomásoknak"
+        };
+        button.Click += (_, _) => ShowNeighborCommunication();
+        controls.Children.Insert(0, button);
     }
 
     private void ShowNeighborCommunication()
@@ -86,6 +85,13 @@ public partial class MainWindow : Window
         NeighborMessages.Insert(0, $"{Engine.ClockText} — {message.Trim()}");
         while (NeighborMessages.Count > 100)
             NeighborMessages.RemoveAt(NeighborMessages.Count - 1);
+    }
+
+    private void AdvanceSimulation(Action advance)
+    {
+        var previousPositions = Engine.Trains.ToDictionary(train => train, train => train.X);
+        advance();
+        NotifyDepartures(previousPositions);
     }
 
     private void NotifyDepartures(IReadOnlyDictionary<Train, double> previousPositions)
@@ -139,7 +145,7 @@ public partial class MainWindow : Window
     private void Step_Click(object sender, RoutedEventArgs e)
     {
         Engine.IsRunning = false;
-        Engine.Step();
+        AdvanceSimulation(Engine.Step);
     }
 
     private void Signal_Click(object sender, RoutedEventArgs e)
@@ -225,7 +231,7 @@ public partial class MainWindow : Window
                 break;
             case Key.F5:
                 Engine.IsRunning = false;
-                Engine.Step();
+                AdvanceSimulation(Engine.Step);
                 e.Handled = true;
                 break;
             case Key.F9:
