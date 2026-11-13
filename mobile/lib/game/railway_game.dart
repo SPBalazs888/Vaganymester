@@ -1,5 +1,3 @@
-import 'dart:ui' show Canvas, Paint, Offset, Rect, RRect, Radius, StrokeCap, PaintingStyle;
-
 import 'package:flame/components.dart';
 import 'package:flame/events.dart';
 import 'package:flame/game.dart';
