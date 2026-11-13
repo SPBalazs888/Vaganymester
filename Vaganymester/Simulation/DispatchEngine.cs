@@ -98,7 +98,29 @@ public sealed class DispatchEngine : BindableBase
     public string SystemMessage { get => _systemMessage; private set => Set(ref _systemMessage, value); }
 
     private int _manualCounter = 9000;
-    private int _automaticDriverIndex;
+    // A várólistában lévő vonatok még nincsenek a pályarajzon.
+    private sealed record RequestedTrain(string Number, int Direction, TrainType Type,
+        string Destination, double RequestedAt);
+    private readonly List<RequestedTrain> _manualQueue = new();
+
+    public int WaitingCount => Timetable.Count(p => !p.Spawned && p.DueSecond <= _elapsed) + _manualQueue.Count;
+    public string WaitingSummary
+    {
+        get
+        {
+            int west = Timetable.Count(p => !p.Spawned && p.DueSecond <= _elapsed && p.Direction > 0)
+                + _manualQueue.Count(p => p.Direction > 0);
+            int east = WaitingCount - west;
+            return WaitingCount == 0
+                ? "Nincs várakozó érkezés."
+                : $"Várakozik: {west} nyugatról, {east} keletről. A vonatok a nyílt vonalon, a rajzon kívül várnak.";
+        }
+    }
+    private void RefreshWaitingIndicators()
+    {
+        Raise(nameof(WaitingCount));
+        Raise(nameof(WaitingSummary));
+    }
 
     public DispatchEngine() => Reset();
 
@@ -112,7 +134,7 @@ public sealed class DispatchEngine : BindableBase
         Journal.Clear();
         _elapsed = 0;
         _manualCounter = 9000;
-        _automaticDriverIndex = 0;
+        _manualQueue.Clear();
         SelectedTrain = null;
         SelectedSignal = null;
         SelectedTurnout = null;
@@ -156,6 +178,7 @@ public sealed class DispatchEngine : BindableBase
         AddPlan("S 2440", 116, +1, TrainType.Szemely, "Tiszaváros", 0);
         AddPlan("S 2445", 136, -1, TrainType.Szemely, "Hegyeshalom", 1);
         Raise(nameof(ActiveCount));
+        RefreshWaitingIndicators();
         Raise(nameof(ClockText));
         Log("Forgalmi szolgálat átvéve. A jelzők alapállásban vörösek.");
         UpdateTurnoutLocks();
@@ -183,55 +206,109 @@ public sealed class DispatchEngine : BindableBase
         if (CollisionCount > 0 && !IsRunning) return;
         _elapsed += dt;
         Raise(nameof(ClockText));
-        SpawnTimetableTrains();
+        // A már közlekedő szerelvények és távozások feldolgozása megelőzi az új belépéseket.
         foreach (var train in Trains.ToList())
             MoveTrain(train, dt);
         DetectCollisions();
         CompleteDepartures();
+        ProcessWaitingTrains();
         UpdateTurnoutLocks();
         RefreshSectionIndicators();
     }
 
-    private void SpawnTimetableTrains()
+    private void ProcessWaitingTrains()
     {
-        foreach (var plan in Timetable)
+        if (CollisionCount > 0) return; // Baleset után ne érkezzen új vonat.
+
+        // Menetrendi és rendkívüli vonatok közös, időrend szerinti feldolgozása.
+        var due = Timetable.Where(p => !p.Spawned && p.DueSecond <= _elapsed)
+            .Select(p => (Time: (double)p.DueSecond, Plan: p, Manual: (RequestedTrain?)null));
+        var manual = _manualQueue.Select(p => (Time: p.RequestedAt,
+            Plan: (ScheduleItem?)null, Manual: (RequestedTrain?)p));
+
+        foreach (var request in due.Concat(manual).OrderBy(p => p.Time).ToList())
         {
-            if (plan.Spawned || plan.DueSecond > _elapsed) continue;
-            if (plan.Driver.AssignedTrain != "Szabad" || !CanSpawn(plan.Direction))
+            var plan = request.Plan;
+            var custom = request.Manual;
+            int direction = plan?.Direction ?? custom!.Direction;
+            if (!CanSpawn(direction, out string reason))
             {
-                plan.Status = "Belépésre vár";
+                if (plan != null && plan.Status != reason)
+                {
+                    plan.Status = reason;
+                    Log($"{plan.Number}: {reason.ToLowerInvariant()} A nyílt vonalon várakozik.", "warning");
+                }
                 continue;
             }
-            plan.Spawned = true;
-            plan.Status = "Forgalomban";
-            CreateTrain(plan.Number, plan.Destination, plan.Type, plan.Driver, plan.Direction);
+
+            Driver? driver = plan?.Driver ?? Drivers.FirstOrDefault(d => d.AssignedTrain == "Szabad");
+            if (driver == null || driver.AssignedTrain != "Szabad")
+            {
+                if (plan != null) plan.Status = "Mozdonyvezetőre vár";
+                continue;
+            }
+
+            string number = plan?.Number ?? custom!.Number;
+            string destination = plan?.Destination ?? custom!.Destination;
+            TrainType type = plan?.Type ?? custom!.Type;
+            if (plan != null)
+            {
+                plan.Spawned = true;
+                plan.Status = "Forgalomban";
+            }
+            else if (custom != null) _manualQueue.Remove(custom);
+            CreateTrain(number, destination, type, driver, direction);
         }
+        RefreshWaitingIndicators();
     }
 
-    private bool CanSpawn(int direction)
+    /// <summary>
+    /// Érkezés csak szabad bejárati szakaszra. Biztonságos üzemben
+    /// a szemből távozó vonat teljes kihaladását is kivárjuk.
+    /// Kikapcsolt védelemnél sem engedélyezünk egymásba megjelenést.
+    /// </summary>
+    private bool CanSpawn(int direction, out string reason)
     {
+        string side = direction > 0 ? "nyugati" : "keleti";
         double start = direction > 0 ? 95 : 1090;
-        return !Trains.Any(t => !t.Crashed && Math.Abs(t.X - start) < 170);
+        if (Trains.Any(t => !t.Crashed && Math.Abs(t.X - start) < Train.Length + 70))
+        {
+            reason = $"Vár: {side} bejárat";
+            return false;
+        }
+
+        if (SafetyEnabled && Trains.Any(t => !t.Crashed && t.Direction != direction))
+        {
+            reason = "Vár: kihaladó vonat";
+            return false;
+        }
+
+        // Két azonos irányból érkező vonat között maradjon megfelelő térköz.
+        if (Trains.Any(t => !t.Crashed && t.Direction == direction &&
+            (direction > 0 ? t.X - Train.Length <= WestPoint + 18
+                           : t.X + Train.Length >= EastPoint - 18)))
+        {
+            reason = "Vár: bejárat foglalt";
+            return false;
+        }
+        reason = "";
+        return true;
     }
 
     public void AddManualTrain(int direction, TrainType type)
     {
-        var driver = Drivers.FirstOrDefault(x => x.AssignedTrain == "Szabad");
-        if (driver == null)
+        if (_manualQueue.Count >= 16)
         {
-            Log("Nincs szabad mozdonyvezető új járathoz.", "warning");
-            SystemMessage = "Az összes mozdonyvezető foglalt.";
+            Log("A rendkívüli vonatok várólistája megtelt (16 járat).", "warning");
+            SystemMessage = "A rendkívüli várólista megtelt.";
             return;
         }
-        if (!CanSpawn(direction))
-        {
-            Log("Új vonat nem indítható: foglalt a bevezető pályaszakasz.", "warning");
-            SystemMessage = "A bevezető szakasz foglalt, próbáld meg később!";
-            return;
-        }
-        _manualCounter++;
-        CreateTrain($"R {_manualCounter}", direction > 0 ? "Keleti végállomás" : "Nyugati végállomás",
-            type, driver, direction);
+        string number = $"R {++_manualCounter}";
+        _manualQueue.Add(new RequestedTrain(number, direction, type,
+            direction > 0 ? "Keleti végállomás" : "Nyugati végállomás", _elapsed));
+        Log($"{number}: rendkívüli menet rögzítve, a nyílt vonalon vár a belépésre.", "info");
+        SystemMessage = $"{number} felvéve a várakozási sorba. Csak szabad bevezető szakaszra lép be.";
+        ProcessWaitingTrains();
     }
 
     private void CreateTrain(string number, string destination, TrainType type, Driver driver, int direction)

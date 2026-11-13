@@ -79,3 +79,17 @@ Az ütközések **szándékosan előidézhetők** az oktatási modellben. Péld�
 - Egy ülésre kattintva szerkeszthető a rajta lévő utas vagy felszabadítható a hely. Az adatok a vonat objektumában maradnak, az ablak bezárása nem törli őket.
 - A tehervonatnak nincs utastér; ezt a külön ablak jelzi.
 - Az utasnevek automatikusan generált tesztadatok, nem valós utasok.
+
+
+## Javítás: belépő vonatok várólistája és sötét kezelőfelület
+
+- A menetrendi és rendkívüli vonatok a nyílt vonalon várnak, ha a bejárati szakasz foglalt.
+- A biztonsági ellenőrzés megakadályozza, hogy ellenkező irányból érkező szerelvény jelenjen meg egy kihaladó vonat előtt.
+- Azonos irányban is megmarad a követési térköz. A várakozási sor automatikusan újrapróbálkozik.
+- A kijelző mutatja a várakozó vonatok számát és irányát, a menetrendben látható a várakozás oka.
+- A kézzel indított rendkívüli vonatok is sorba állnak; legfeljebb 16 kérés várhat.
+- Kikapcsolt biztosítással továbbra is vizsgálható a szembeforgalmi ütközés, de átfedő spawn nem engedélyezett.
+- A főablak és a vonat részletező ablaka egységes, nagy kontrasztú sötét hátteret kapott.
+- A fülek, gombok, listák, táblázatfejlécek és kombinált listák olvashatósága javult.
+
+GitHub Actions munkafolyamat végzi a WPF-projekt Windowsos fordításellenőrzését a PR-eken.
