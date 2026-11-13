@@ -481,9 +481,13 @@ class _DispatchScreenState extends State<DispatchScreen> {
               const SizedBox(width: 12),
             ],
             if (widget.store.showHints)
-              Text(simulation.message,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(color: _muted, fontSize: 10),
+              SizedBox(
+                width: width < 1000 ? 190 : 280,
+                child: Text(simulation.message,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(color: _muted, fontSize: 10),
+                ),
               ),
             const SizedBox(width: 8),
             const Text('ÁLLOMÁSOK',

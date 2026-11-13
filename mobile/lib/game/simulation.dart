@@ -391,9 +391,12 @@ class RailwaySimulation extends ChangeNotifier {
     return true;
   }
 
-  void authorize(String trainNumber) {
-    train(trainNumber).authorized = true;
+  bool authorize(String trainNumber) {
+    final selected = train(trainNumber);
+    if (selected.moving || emergency || gameOver) return false;
+    selected.authorized = true;
     notifyListeners();
+    return true;
   }
 
   /// Külső képkockaidő. A belső logika legfeljebb fél szimulációs
@@ -426,7 +429,7 @@ class RailwaySimulation extends ChangeNotifier {
         train.completedLegs++;
         completedLegs++;
         combo++;
-        final reward = 100 + math.min(combo * 10, 100) +
+        final reward = 100 + math.min<int>(combo * 10, 100) +
             (train.kind == TrainKind.intercity ? 50 : 0);
         score += reward;
         message = train.number + ' megérkezett. +' + reward.toString() + ' pont';
