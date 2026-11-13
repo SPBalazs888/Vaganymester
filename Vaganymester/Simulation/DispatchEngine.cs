@@ -76,7 +76,8 @@ public sealed class DispatchEngine : BindableBase
 
     // A négy vágányszakasz foglaltsága élőben megjelenik a biztosítóberendezési térképen.
     private bool IsBusy(string section) => Trains.Any(t =>
-        Occupies(t, section) || t.PendingSection == section);
+        Occupies(t, section) || t.PendingSection == section)
+        || Signals.Any(s => s.IsGreen && DestinationFor(s) == section);
     public string WestSectionLabel => IsBusy("NYUGAT") ? "NYUGATI BLOKK: FOGLALT" : "NYUGATI BLOKK: SZABAD";
     public string EastSectionLabel => IsBusy("KELET") ? "KELETI BLOKK: FOGLALT" : "KELETI BLOKK: SZABAD";
     public string Track1SectionLabel => IsBusy("VÁGÁNY 1") ? "1. VÁGÁNY: FOGLALT" : "1. VÁGÁNY: SZABAD";
@@ -280,6 +281,16 @@ public sealed class DispatchEngine : BindableBase
         if (SafetyEnabled && Trains.Any(t => !t.Crashed && t.Direction != direction))
         {
             reason = "Vár: kihaladó vonat";
+            return false;
+        }
+
+        string nextBlock = direction > 0
+            ? (WestTurnout.Track == 0 ? "VÁGÁNY 1" : "VÁGÁNY 2")
+            : (EastTurnout.Track == 0 ? "VÁGÁNY 1" : "VÁGÁNY 2");
+
+        if (Signals.Any(s => s.IsGreen && DestinationFor(s) == nextBlock))
+        {
+            reason = "Vár: bejárat foglalt";
             return false;
         }
 
