@@ -26,6 +26,58 @@ class TrackSection {
       (from == second && to == first);
 }
 
+enum RailwaySide { west, east }
+enum SignalKind { entry, exit }
+
+class StationControls {
+  StationControls(this.station);
+  final RailwayStation station;
+  int westTurnout = 0;
+  int eastTurnout = 0;
+  bool westEntry = false;
+  bool eastEntry = false;
+  bool westExit = false;
+  bool eastExit = false;
+  final Set<int> closedTracks = {};
+
+  int turnout(RailwaySide side) =>
+      side == RailwaySide.west ? westTurnout : eastTurnout;
+  bool signal(RailwaySide side, SignalKind kind) {
+    if (side == RailwaySide.west) {
+      return kind == SignalKind.entry ? westEntry : westExit;
+    }
+    return kind == SignalKind.entry ? eastEntry : eastExit;
+  }
+  void selectTurnout(RailwaySide side, int index) {
+    if (side == RailwaySide.west) {
+      westTurnout = index;
+    } else {
+      eastTurnout = index;
+    }
+  }
+  void setSignal(RailwaySide side, SignalKind kind, bool green) {
+    if (side == RailwaySide.west) {
+      if (kind == SignalKind.entry) {
+        westEntry = green;
+      } else {
+        westExit = green;
+      }
+    } else {
+      if (kind == SignalKind.entry) {
+        eastEntry = green;
+      } else {
+        eastExit = green;
+      }
+    }
+  }
+  void allRed() {
+    westEntry = false;
+    eastEntry = false;
+    westExit = false;
+    eastExit = false;
+  }
+}
+
 class SimTrain {
   SimTrain({
     required this.number,
@@ -47,6 +99,8 @@ class SimTrain {
   bool moving = false;
   bool authorized = false;
   int completedLegs = 0;
+  int platformTrack = 0;
+  int arrivalTrack = 0;
 
   String get currentStationId => route[leg];
   String get nextStationId => route[leg + 1];
@@ -65,7 +119,7 @@ class SimTrain {
 class RailwaySimulation extends ChangeNotifier {
   final List<RailwayStation> stations = const [
     RailwayStation('fenyvesliget', 'Fenyvesliget', 170),
-    RailwayStation('korospatak', 'Kőröspatak', 700),
+    RailwayStation('korospatak', 'Kőröspatak', 700, platforms: 4),
     RailwayStation('tiszavaros', 'Tiszaváros', 1230),
   ];
 
@@ -73,6 +127,10 @@ class RailwaySimulation extends ChangeNotifier {
     TrackSection('FV-KP', 'fenyvesliget', 'korospatak', 6),
     TrackSection('KP-TV', 'korospatak', 'tiszavaros', 6),
   ];
+
+  late final Map<String, StationControls> stationControls = {
+    for (final s in stations) s.id: StationControls(s),
+  };
 
   final List<SimTrain> trains = [
     SimTrain(
@@ -107,6 +165,13 @@ class RailwaySimulation extends ChangeNotifier {
   bool emergency = false;
   bool automatic = true;
   int completedLegs = 0;
+  int score = 0;
+  int lives = 3;
+  int combo = 0;
+  int collisionCount = 0;
+  bool gameOver = false;
+  bool riskMode = false;
+  String message = 'Állíts váltót és jelzőt, majd engedélyezd az indulást!';
 
   String get clock {
     final total = (8 * 3600 + elapsedSeconds.floor()) % (24 * 3600);
@@ -135,6 +200,33 @@ class RailwaySimulation extends ChangeNotifier {
     return null;
   }
 
+  StationControls controls(String stationId) => stationControls[stationId]!;
+  RailwaySide travelSide(SimTrain train) =>
+      station(train.nextStationId).mapX > station(train.currentStationId).mapX
+          ? RailwaySide.east : RailwaySide.west;
+  RailwaySide opposite(RailwaySide side) =>
+      side == RailwaySide.west ? RailwaySide.east : RailwaySide.west;
+
+  bool trackReserved(String stationId, int track, {SimTrain? except}) =>
+      trains.any((t) => !identical(t, except) &&
+          (t.moving
+              ? t.nextStationId == stationId && t.arrivalTrack == track
+              : t.currentStationId == stationId && t.platformTrack == track));
+
+  double mapHeight(SimTrain train) {
+    final origin = 346.0 + train.platformTrack * 36;
+    if (!train.moving) return origin;
+    final destination = 346.0 + train.arrivalTrack * 36;
+    if (train.progress < 0.15) {
+      return origin + (340 - origin) * train.progress / 0.15;
+    }
+    if (train.progress > 0.85) {
+      return 340 + (destination - 340) *
+          ((train.progress - 0.85) / 0.15);
+    }
+    return 340;
+  }
+
   /// Álló vonatok és az ide érkező, úton lévő vonatok együtt.
   int reservedPlatforms(String stationId) => trains.where((train) {
         if (train.moving) return train.nextStationId == stationId;
@@ -155,7 +247,123 @@ class RailwaySimulation extends ChangeNotifier {
 
   void setAutomatic(bool value) {
     automatic = value;
+    if (!value) {
+      for (final c in stationControls.values) {
+        c.allRed();
+      }
+    }
+    message = value ? 'Automatikus forgalomirányítás.' : 'Kézi forgalomirányítás.';
     notifyListeners();
+  }
+
+  void setRiskMode(bool enabled) {
+    riskMode = enabled;
+    message = enabled
+        ? 'Veszélyes üzem: kockázatos indulás ütközést okozhat!'
+        : 'Biztonságos üzem: ütköző vágányút tiltva.';
+    notifyListeners();
+  }
+
+  bool setTurnout(String stationId, RailwaySide side, int track) {
+    final c = controls(stationId);
+    if (track < 0 || track >= c.station.platforms ||
+        c.closedTracks.contains(track) ||
+        trains.any((t) => t.moving && t.nextStationId == stationId &&
+            opposite(travelSide(t)) == side)) return false;
+    c.selectTurnout(side, track);
+    c.setSignal(side, SignalKind.entry, false);
+    c.setSignal(side, SignalKind.exit, false);
+    message = 'Váltó állítva: ' + c.station.name +
+        ', ' + (track + 1).toString() + '. vágány.';
+    notifyListeners();
+    return true;
+  }
+
+  bool setSignal(String stationId, RailwaySide side,
+      SignalKind kind, bool green) {
+    final c = controls(stationId);
+    if (green) {
+      if (emergency || gameOver || c.closedTracks.contains(c.turnout(side))) {
+        return false;
+      }
+      final adjacent = sections.where((s) =>
+          (side == RailwaySide.west
+              ? s.to == stationId || s.from == stationId
+              : s.from == stationId || s.to == stationId)).toList();
+      if (adjacent.isEmpty) return false;
+      if (adjacent.every((s) => s.closed || occupying(s) != null)) {
+        return false;
+      }
+    }
+    c.setSignal(side, kind, green);
+    notifyListeners();
+    return true;
+  }
+
+  bool setTrackClosed(String stationId, int track, bool closed) {
+    final c = controls(stationId);
+    if (closed && (trackReserved(stationId, track) ||
+        c.westTurnout == track || c.eastTurnout == track)) return false;
+    if (closed) {
+      c.closedTracks.add(track);
+    } else {
+      c.closedTracks.remove(track);
+    }
+    notifyListeners();
+    return true;
+  }
+
+  void newShift() {
+    final fresh = RailwaySimulation();
+    trains..clear()..addAll(fresh.trains);
+    elapsedSeconds = 0;
+    score = 0;
+    lives = 3;
+    combo = 0;
+    collisionCount = 0;
+    completedLegs = 0;
+    gameOver = false;
+    emergency = false;
+    running = true;
+    message = 'Új szolgálat indult. Balesetmentes közlekedést!';
+    for (final c in stationControls.values) {
+      c.westTurnout = 0;
+      c.eastTurnout = 0;
+      c.closedTracks.clear();
+      c.allRed();
+    }
+    for (final s in sections) {
+      s.closed = false;
+    }
+    fresh.dispose();
+    notifyListeners();
+  }
+
+  /// Csak az opcionális veszélyes játékparancs idézhet elő ütközést.
+  bool unsafeDispatch(String number) {
+    if (!riskMode || emergency || gameOver) return false;
+    final t = train(number);
+    if (t.moving || elapsedSeconds < t.readyAt) return false;
+    final section = sectionBetween(t.currentStationId, t.nextStationId);
+    if (occupying(section) == null) return false;
+    collisionCount++;
+    lives = math.max(0, lives - 1);
+    score = math.max(0, score - 250);
+    combo = 0;
+    message = 'ÜTKÖZÉS! -1 élet, -250 pont. A forgalom visszaállt.';
+    final fresh = RailwaySimulation();
+    trains..clear()..addAll(fresh.trains);
+    fresh.dispose();
+    for (final c in stationControls.values) {
+      c.allRed();
+    }
+    if (lives == 0) {
+      gameOver = true;
+      running = false;
+      message = 'VÉGE A JÁTÉKNAK! Pontszám: ' + score.toString();
+    }
+    notifyListeners();
+    return true;
   }
 
   void setMultiplier(int value) {
@@ -166,6 +374,12 @@ class RailwaySimulation extends ChangeNotifier {
 
   void setEmergency(bool value) {
     emergency = value;
+    if (value) {
+      for (final c in stationControls.values) {
+        c.allRed();
+      }
+    }
+    message = value ? 'VÉSZLEÁLLÍTÁS!' : 'Forgalom feloldva.';
     notifyListeners();
   }
 
@@ -185,7 +399,7 @@ class RailwaySimulation extends ChangeNotifier {
   /// Külső képkockaidő. A belső logika legfeljebb fél szimulációs
   /// másodperces lépésekben halad, így nem ugrik át foglaltsági eseményeket.
   void tick(double realSeconds) {
-    if (!running || emergency) return;
+    if (!running || emergency || gameOver) return;
     var remaining = realSeconds.clamp(0.0, 0.2).toDouble() * timeMultiplier;
     while (remaining > 0) {
       final step = math.min(0.5, remaining);
@@ -205,11 +419,17 @@ class RailwaySimulation extends ChangeNotifier {
       train.progress += dt * train.speedKmH / (3600 * section.lengthKm);
       if (train.progress >= 1) {
         train.leg++;
+        train.platformTrack = train.arrivalTrack;
         train.moving = false;
         train.progress = 0;
         train.authorized = false;
         train.completedLegs++;
         completedLegs++;
+        combo++;
+        final reward = 100 + math.min(combo * 10, 100) +
+            (train.kind == TrainKind.intercity ? 50 : 0);
+        score += reward;
+        message = train.number + ' megérkezett. +' + reward.toString() + ' pont';
         train.readyAt = elapsedSeconds + 35;
         // Végállomás: tényleges megállás után indulhat vissza.
         if (train.leg == train.route.length - 1) {
@@ -234,13 +454,37 @@ class RailwaySimulation extends ChangeNotifier {
       final section = sectionBetween(
         train.currentStationId, train.nextStationId);
       if (section.closed || occupying(section) != null) continue;
-      if (reservedPlatforms(train.nextStationId) >=
-          station(train.nextStationId).platforms) {
+      final side = travelSide(train);
+      final source = controls(train.currentStationId);
+      final destination = controls(train.nextStationId);
+      final entrySide = opposite(side);
+      final available = List.generate(destination.station.platforms, (i) => i)
+          .where((i) => !destination.closedTracks.contains(i) &&
+              !trackReserved(train.nextStationId, i)).toList();
+      if (available.isEmpty || source.closedTracks.contains(train.platformTrack)) {
         continue;
       }
+      // Automata módban a szabad peront kiválasztja a biztosítóberendezés.
+      if (automatic) {
+        // A már közeledő vonat bejárati váltóját nem állíthatjuk át.
+        if (trains.any((t) => t.moving && t.nextStationId == train.nextStationId
+            && opposite(travelSide(t)) == entrySide)) continue;
+        source.selectTurnout(side, train.platformTrack);
+        destination.selectTurnout(entrySide, available.first);
+        source.setSignal(side, SignalKind.exit, true);
+        destination.setSignal(entrySide, SignalKind.entry, true);
+      }
+      final selected = destination.turnout(entrySide);
+      if (source.turnout(side) != train.platformTrack ||
+          !source.signal(side, SignalKind.exit) ||
+          !destination.signal(entrySide, SignalKind.entry) ||
+          !available.contains(selected)) continue;
+      train.arrivalTrack = selected;
       train.moving = true;
       train.progress = 0;
       train.authorized = false;
+      source.setSignal(side, SignalKind.exit, false);
+      destination.setSignal(entrySide, SignalKind.entry, false);
     }
   }
 

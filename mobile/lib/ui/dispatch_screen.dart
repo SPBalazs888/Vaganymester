@@ -3,13 +3,22 @@ import 'package:flutter/material.dart';
 
 import '../game/railway_game.dart';
 import '../game/simulation.dart';
+import '../data/session_store.dart';
+import 'main_menu.dart';
+import 'station_controls_panel.dart';
 
 const _surface = Color(0xFF142B3B);
 const _muted = Color(0xFFA9C5D2);
 const _accent = Color(0xFF35DDC3);
 
 class DispatchScreen extends StatefulWidget {
-  const DispatchScreen({super.key});
+  const DispatchScreen({
+    super.key,
+    required this.store,
+    required this.onExit,
+  });
+  final SessionStore store;
+  final VoidCallback onExit;
 
   @override
   State<DispatchScreen> createState() => _DispatchScreenState();
@@ -20,11 +29,16 @@ class _DispatchScreenState extends State<DispatchScreen> {
   late final RailwayGame game;
   String selectedStationId = 'korospatak';
   String? selectedTrainId;
+  bool _scoreRecorded = false;
 
   @override
   void initState() {
     super.initState();
-    simulation = RailwaySimulation();
+    simulation = RailwaySimulation()
+      ..setAutomatic(widget.store.autoDispatch)
+      ..setRiskMode(widget.store.riskMode)
+      ..setMultiplier(widget.store.speed);
+    simulation.addListener(_checkGameOver);
     game = RailwayGame(
       simulation: simulation,
       onStation: _selectStation,
@@ -34,8 +48,92 @@ class _DispatchScreenState extends State<DispatchScreen> {
 
   @override
   void dispose() {
+    simulation.removeListener(_checkGameOver);
     simulation.dispose();
     super.dispose();
+  }
+
+  void _checkGameOver() {
+    if (!simulation.gameOver || _scoreRecorded) return;
+    _scoreRecorded = true;
+    widget.store.recordScore(simulation.score);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _showGameOver();
+    });
+  }
+
+  Future<void> _showGameOver() async {
+    await showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('VÉGE A SZOLGÁLATNAK'),
+        content: Text('Elfogytak az életeid. Pontszám: ' +
+            simulation.score.toString() +
+            '\nAz eredmény bekerült a helyi ranglistába.'),
+        actions: [
+          TextButton(
+            onPressed: () {
+              Navigator.pop(dialogContext);
+              _finishShift(save: false);
+            },
+            child: const Text('FŐMENÜ'),
+          ),
+          FilledButton(
+            onPressed: () {
+              simulation.newShift();
+              _scoreRecorded = false;
+              setState(() => selectedTrainId = null);
+              Navigator.pop(dialogContext);
+            },
+            child: const Text('ÚJRA'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _finishShift({bool save = true}) async {
+    simulation.setRunning(false);
+    if (save && !_scoreRecorded && simulation.score > 0) {
+      _scoreRecorded = true;
+      await widget.store.recordScore(simulation.score);
+    }
+    if (mounted) widget.onExit();
+  }
+
+  Future<void> _openSettings() async {
+    await showSettings(context, widget.store);
+    if (!mounted) return;
+    simulation.setAutomatic(widget.store.autoDispatch);
+    simulation.setRiskMode(widget.store.riskMode);
+    simulation.setMultiplier(widget.store.speed);
+  }
+
+  void _warn(String text) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(text)),
+    );
+  }
+
+  Future<void> _unsafe(String number) async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('KOCKÁZATOS UTASÍTÁS'),
+        content: const Text('A foglalt szakaszra történő indítás ütközést '
+            'okoz, egy életet és 250 pontot veszíthetsz. Folytatod?'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(dialogContext, false),
+              child: const Text('MÉGSE')),
+          FilledButton(onPressed: () => Navigator.pop(dialogContext, true),
+              child: const Text('VESZÉLYES INDÍTÁS')),
+        ],
+      ),
+    );
+    if (confirm == true && mounted && !simulation.unsafeDispatch(number)) {
+      _warn('Veszélyes indítás csak foglalt szakaszon, kész vonattal lehetséges.');
+    }
   }
 
   void _selectStation(String id) {
@@ -66,17 +164,6 @@ class _DispatchScreenState extends State<DispatchScreen> {
         ),
       ),
     );
-  }
-
-  void _setClosure(TrackSection section, bool closed) {
-    final success = simulation.setSectionClosed(section.id, closed);
-    if (!success && mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text(
-          'Foglalt szakaszt nem zárhatsz le. Várd meg a vonatot!',
-        )),
-      );
-    }
   }
 
   @override
@@ -154,78 +241,73 @@ class _DispatchScreenState extends State<DispatchScreen> {
   }
 
   Widget _toolbar(double width) {
-    final compact = width < 1000;
     return SizedBox(
       height: 64,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 13),
+      child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        padding: const EdgeInsets.symmetric(horizontal: 12),
         child: Row(
           children: [
-            const Icon(Icons.train, color: _accent, size: 28),
+            const Icon(Icons.train, color: _accent, size: 25),
+            const SizedBox(width: 6),
+            const Text('VÁGÁNYMESTER',
+              style: TextStyle(fontWeight: FontWeight.w900, fontSize: 15)),
+            const SizedBox(width: 12),
+            _statusPill('★ ' + simulation.score.toString() + ' PONT',
+                const Color(0xFFFFCC68)),
             const SizedBox(width: 8),
-            Text(
-              compact ? 'VÁGÁNYMESTER' : 'VÁGÁNYMESTER  /  FORGALMI KÖZPONT',
-              style: TextStyle(
-                fontWeight: FontWeight.w800,
-                fontSize: compact ? 14 : 18,
-                letterSpacing: 0.8,
-              ),
-            ),
-            const Spacer(),
-            if (!compact) ...[
-              _statusPill('ÚTON: ${simulation.movingCount}', _accent),
-              const SizedBox(width: 8),
-            ],
-            Text(
-              simulation.clock,
-              style: const TextStyle(
-                fontFeatures: [FontFeature.tabularFigures()],
-                fontWeight: FontWeight.w800,
-                fontSize: 20,
-              ),
-            ),
-            const SizedBox(width: 9),
+            _statusPill('♥ ' + simulation.lives.toString() + ' ÉLET',
+                const Color(0xFFF16A74)),
+            const SizedBox(width: 10),
+            Text(simulation.clock, style: const TextStyle(
+              fontFeatures: [FontFeature.tabularFigures()],
+              fontWeight: FontWeight.bold, fontSize: 17)),
+            const SizedBox(width: 7),
             IconButton.filledTonal(
               tooltip: simulation.running ? 'Szünet' : 'Folytatás',
               onPressed: () =>
                   simulation.setRunning(!simulation.running),
-              icon: Icon(
-                simulation.running ? Icons.pause : Icons.play_arrow,
-              ),
+              icon: Icon(simulation.running ? Icons.pause : Icons.play_arrow),
             ),
-            const SizedBox(width: 6),
-            DropdownButtonHideUnderline(
-              child: DropdownButton<int>(
-                value: simulation.timeMultiplier,
-                dropdownColor: _surface,
-                items: const [1, 10, 30, 60]
-                    .map((speed) => DropdownMenuItem(
-                          value: speed,
-                          child: Text('${speed}×'),
-                        ))
-                    .toList(),
-                onChanged: (value) {
-                  if (value != null) simulation.setMultiplier(value);
-                },
-              ),
-            ),
+            DropdownButtonHideUnderline(child: DropdownButton<int>(
+              value: simulation.timeMultiplier,
+              dropdownColor: _surface,
+              items: const [1, 10, 30, 60]
+                  .map((s) => DropdownMenuItem(
+                    value: s, child: Text(s.toString() + '×'),
+                  )).toList(),
+              onChanged: (value) {
+                if (value != null) {
+                  simulation.setMultiplier(value);
+                  widget.store.setSpeed(value);
+                }
+              },
+            )),
             const SizedBox(width: 8),
-            Tooltip(
-              message: simulation.emergency
-                  ? 'Vészleállítás feloldása'
-                  : 'Központi vészleállítás',
-              child: FilledButton.icon(
-                style: FilledButton.styleFrom(
-                  backgroundColor: simulation.emergency
-                      ? const Color(0xFF9C3F44)
-                      : const Color(0xFF623239),
-                  foregroundColor: Colors.white,
-                ),
-                onPressed: () =>
-                    simulation.setEmergency(!simulation.emergency),
-                icon: const Icon(Icons.warning_amber_rounded, size: 18),
-                label: Text(compact ? 'STOP' : 'VÉSZSTOP'),
+            FilledButton.icon(
+              style: FilledButton.styleFrom(
+                backgroundColor: simulation.emergency
+                    ? const Color(0xFF9C3F44) : const Color(0xFF623239),
+                foregroundColor: Colors.white,
               ),
+              onPressed: () => simulation.setEmergency(!simulation.emergency),
+              icon: const Icon(Icons.warning_amber_rounded, size: 17),
+              label: Text(simulation.emergency ? 'FELOLDÁS' : 'VÉSZSTOP'),
+            ),
+            IconButton(
+              tooltip: 'Ranglista',
+              onPressed: () => showLeaderboard(context, widget.store),
+              icon: const Icon(Icons.emoji_events_outlined),
+            ),
+            IconButton(
+              tooltip: 'Beállítások',
+              onPressed: _openSettings,
+              icon: const Icon(Icons.settings_outlined),
+            ),
+            IconButton(
+              tooltip: 'Szolgálat befejezése',
+              onPressed: _finishShift,
+              icon: const Icon(Icons.home_outlined),
             ),
           ],
         ),
@@ -241,7 +323,7 @@ class _DispatchScreenState extends State<DispatchScreen> {
           border: Border.all(color: const Color(0xFF285169)),
         ),
         child: const Text(
-          'ÉLŐ VASÚTI HÁLÓZAT  •  3 ÁLLOMÁS',
+          'ÉLŐ HÁLÓZAT  •  3 ÁLLOMÁS  •  PINCH TO ZOOM',
           style: TextStyle(
             color: _muted,
             fontSize: 11,
@@ -323,12 +405,25 @@ class _DispatchScreenState extends State<DispatchScreen> {
                 : 'Állomáson vár'),
         _dataRow('Teljesített szakaszok', '${train.completedLegs}'),
         const SizedBox(height: 12),
-        if (!simulation.automatic && !train.moving)
+        if (!simulation.automatic && !train.moving) ...[
           FilledButton.icon(
-            onPressed: () => simulation.authorize(train.number),
+            onPressed: () {
+              if (!simulation.authorize(train.number)) {
+                _warn('Ez a vonat nem indítható.');
+              }
+            },
             icon: const Icon(Icons.check_circle_outline),
             label: const Text('Indulás engedélyezése'),
           ),
+          if (simulation.riskMode) ...[
+            const SizedBox(height: 7),
+            OutlinedButton.icon(
+              onPressed: () => _unsafe(train.number),
+              icon: const Icon(Icons.warning_amber, color: Color(0xFFF16A74)),
+              label: const Text('KOCKÁZATOS INDÍTÁS'),
+            ),
+          ],
+        ],
         TextButton(
           onPressed: () => setState(() => selectedTrainId = null),
           child: const Text('Vissza az állomáshoz'),
@@ -337,52 +432,16 @@ class _DispatchScreenState extends State<DispatchScreen> {
     );
   }
 
-  Widget _stationDetails(RailwayStation station) {
-    final related = simulation.sections
-        .where((section) =>
-            section.from == station.id || section.to == station.id)
-        .toList();
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(station.name, style: const TextStyle(
-          fontSize: 23, fontWeight: FontWeight.w800)),
-        const SizedBox(height: 8),
-        _dataRow('Foglalt / foglalt érkezési peron',
-            '${simulation.reservedPlatforms(station.id)} / ${station.platforms}'),
-        _dataRow('Automatizálás',
-            simulation.automatic ? 'Bekapcsolva' : 'Kézi üzem'),
-        const Divider(height: 25),
-        SwitchListTile.adaptive(
-          dense: true,
-          contentPadding: EdgeInsets.zero,
-          title: const Text('Automatikus forgalom'),
-          value: simulation.automatic,
-          onChanged: simulation.setAutomatic,
-        ),
-        const SizedBox(height: 4),
-        const Text('Csatlakozó szakaszok',
-            style: TextStyle(fontWeight: FontWeight.w700)),
-        for (final section in related)
-          SwitchListTile.adaptive(
-            dense: true,
-            contentPadding: EdgeInsets.zero,
-            title: Text(section.id),
-            subtitle: Text(section.closed ? 'Vágányzár' :
-                simulation.occupying(section) == null
-                    ? 'Szabad' : 'Vonat halad rajta'),
-            value: section.closed,
-            onChanged: (value) => _setClosure(section, value),
-          ),
-        const SizedBox(height: 8),
-        const Text(
-          'Kézi üzemben a vonatra kattintva adható indulási engedély. '
-          'A szakaszfoglaltság és a peronkapacitás mindig védett.',
-          style: TextStyle(color: _muted, fontSize: 12, height: 1.35),
-        ),
-      ],
-    );
-  }
+  Widget _stationDetails(RailwayStation station) =>
+      StationControlsPanel(
+        simulation: simulation,
+        station: station,
+        onRejected: _warn,
+        onAutomatic: (enabled) {
+          simulation.setAutomatic(enabled);
+          widget.store.setAuto(enabled);
+        },
+      );
 
   Widget _dataRow(String title, String value) => Padding(
         padding: const EdgeInsets.only(bottom: 9),
@@ -421,6 +480,12 @@ class _DispatchScreenState extends State<DispatchScreen> {
               _statusPill('TELJESÍTETT: ${simulation.completedLegs}', _accent),
               const SizedBox(width: 12),
             ],
+            if (widget.store.showHints)
+              Text(simulation.message,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(color: _muted, fontSize: 10),
+              ),
+            const SizedBox(width: 8),
             const Text('ÁLLOMÁSOK',
                 style: TextStyle(color: _muted, fontSize: 10,
                     fontWeight: FontWeight.w700)),

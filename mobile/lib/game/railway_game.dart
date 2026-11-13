@@ -10,7 +10,7 @@ const mapMuted = Color(0xFFA5C2CF);
 const mapAccent = Color(0xFF32DDC1);
 const mapWarning = Color(0xFFFFC977);
 
-class RailwayGame extends FlameGame {
+class RailwayGame extends FlameGame with DragCallbacks, ScaleCallbacks {
   RailwayGame({
     required this.simulation,
     required this.onStation,
@@ -26,6 +26,27 @@ class RailwayGame extends FlameGame {
   final void Function(String stationId) onStation;
   final void Function(String trainNumber) onTrain;
   final List<TrainMarker> markers = [];
+  double _gestureStartZoom = 1;
+
+  @override
+  void onScaleStart(ScaleStartEvent event) {
+    super.onScaleStart(event);
+    _gestureStartZoom = camera.viewfinder.zoom;
+  }
+
+  @override
+  void onScaleUpdate(ScaleUpdateEvent event) {
+    camera.viewfinder.zoom =
+        (_gestureStartZoom * event.scale).clamp(0.65, 2.8).toDouble();
+    // Kétujjas mozgatás: az aktuális zoom mellett természetes tempó.
+    pan(event.focalPointDelta / camera.viewfinder.zoom);
+  }
+
+  @override
+  void onDragUpdate(DragUpdateEvent event) {
+    if (isScaling) return;
+    pan(event.localDelta / camera.viewfinder.zoom);
+  }
 
   @override
   Future<void> onLoad() async {
@@ -50,7 +71,7 @@ class RailwayGame extends FlameGame {
 
   void zoom(double factor) {
     camera.viewfinder.zoom =
-        (camera.viewfinder.zoom * factor).clamp(0.65, 1.8).toDouble();
+        (camera.viewfinder.zoom * factor).clamp(0.65, 2.8).toDouble();
   }
 
   void recenter() {
@@ -67,7 +88,7 @@ class RailwayGame extends FlameGame {
   }
 }
 
-class TrackBackdrop extends PositionComponent with DragCallbacks {
+class TrackBackdrop extends PositionComponent {
   TrackBackdrop(this.dispatcher)
     : super(
         position: Vector2.zero(),
@@ -76,11 +97,6 @@ class TrackBackdrop extends PositionComponent with DragCallbacks {
       );
 
   final RailwayGame dispatcher;
-
-  @override
-  void onDragUpdate(DragUpdateEvent event) {
-    dispatcher.pan(event.localDelta);
-  }
 
   @override
   void render(Canvas canvas) {
@@ -124,6 +140,45 @@ class TrackBackdrop extends PositionComponent with DragCallbacks {
       ..strokeWidth = 3;
     for (double x = 90; x <= 1320; x += 24) {
       canvas.drawLine(Offset(x, 321), Offset(x, 359), sleeper);
+    }
+
+    // WPF-szerű, többszálú állomási vágányok és kitérők.
+    for (final station in dispatcher.simulation.stations) {
+      final local = dispatcher.simulation.controls(station.id);
+      final x = station.mapX;
+      final platform = Paint()
+        ..color = const Color(0xFF7EAAB9)
+        ..strokeWidth = 4
+        ..strokeCap = StrokeCap.round;
+      for (var i = 0; i < station.platforms; i++) {
+        final y = 346.0 + i * 36;
+        final isClosed = local.closedTracks.contains(i);
+        platform.color = isClosed
+            ? const Color(0xFFF16A74)
+            : const Color(0xFF7EAAB9);
+        canvas.drawLine(
+          Offset(x - 96, y), Offset(x + 96, y), platform);
+        canvas.drawLine(
+          Offset(x - 145, 340), Offset(x - 96, y), platform);
+        canvas.drawLine(
+          Offset(x + 96, y), Offset(x + 145, 340), platform);
+        _drawText(canvas, (i + 1).toString(),
+            Offset(x - 80, y - 28), fontSize: 12, color: mapMuted);
+      }
+      final westY = 346.0 + local.westTurnout * 36;
+      final eastY = 346.0 + local.eastTurnout * 36;
+      canvas.drawLine(
+        Offset(x - 145, 340), Offset(x - 96, westY),
+        Paint()..color = mapAccent..strokeWidth = 5);
+      canvas.drawLine(
+        Offset(x + 96, eastY), Offset(x + 145, 340),
+        Paint()..color = mapAccent..strokeWidth = 5);
+      canvas.drawCircle(
+        Offset(x - 117, 340), 10,
+        Paint()..color = local.westEntry ? mapAccent : const Color(0xFFF16A74));
+      canvas.drawCircle(
+        Offset(x + 117, 340), 10,
+        Paint()..color = local.eastExit ? mapAccent : const Color(0xFFF16A74));
     }
 
     for (final section in dispatcher.simulation.sections) {
@@ -226,7 +281,8 @@ class TrainMarker extends PositionComponent with TapCallbacks {
   @override
   void update(double dt) {
     super.update(dt);
-    position.setValues(simulation.mapPosition(train) - 54, 340 - 26);
+    position.setValues(simulation.mapPosition(train) - 54,
+        simulation.mapHeight(train) - 26);
   }
 
   @override

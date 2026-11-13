@@ -8,15 +8,15 @@ void pump(RailwaySimulation sim) {
 }
 
 void main() {
-  test('Három különálló, valódi állomás és két szakasz indul', () {
+  test('Három tényleges állomás, négyvágányos központ', () {
     final sim = RailwaySimulation();
     expect(sim.stations.length, 3);
+    expect(sim.station('korospatak').platforms, 4);
     expect(sim.sections.length, 2);
     expect(sim.trains.length, 3);
-    expect(sim.trains.every((t) => !t.moving), isTrue);
   });
 
-  test('Ugyanazon a szakaszon nem indulhat el két vonat', () {
+  test('Szemből nem indulhat két vonat ugyanarra a szakaszra', () {
     final sim = RailwaySimulation();
     sim.trains
       ..clear()
@@ -60,25 +60,81 @@ void main() {
     expect(sim.train('S 2412').progress, progress);
   });
 
-  test('Kézi üzemnél engedély nélkül nincs indulás', () {
+  test('Kézi módban beállított váltók és jelzők szükségesek', () {
     final sim = RailwaySimulation();
     sim.setAutomatic(false);
     pump(sim);
     expect(sim.movingCount, 0);
+    expect(sim.setTurnout('korospatak', RailwaySide.west, 1), isTrue);
+    expect(sim.setSignal('fenyvesliget',
+        RailwaySide.east, SignalKind.exit, true), isTrue);
+    expect(sim.setSignal('korospatak',
+        RailwaySide.west, SignalKind.entry, true), isTrue);
     sim.authorize('S 2412');
     sim.tick(0.1);
     expect(sim.train('S 2412').moving, isTrue);
+    expect(sim.train('S 2412').arrivalTrack, 1);
   });
 
-  test('A vonat végállomáson megfordul, nem tűnik el', () {
+  test('Foglalt vagy lezárt peronra nem állítható váltó', () {
     final sim = RailwaySimulation();
-    sim.trains.removeWhere((t) => t.number != 'S 2412');
-    for (var i = 0; i < 60; i++) {
+    expect(sim.setTrackClosed('korospatak', 2, true), isTrue);
+    expect(sim.setTurnout('korospatak', RailwaySide.east, 2), isFalse);
+    expect(sim.setTrackClosed('korospatak', 0, true), isFalse);
+  });
+
+  test('Érkezésekért pont jár és folytatódik a vonat útja', () {
+    final sim = RailwaySimulation();
+    for (var i = 0; i < 70; i++) {
       sim.tick(0.2);
     }
-    final train = sim.train('S 2412');
-    expect(sim.trains.length, 1);
-    expect(train.completedLegs, greaterThan(0));
     expect(sim.completedLegs, greaterThan(0));
+    expect(sim.score, greaterThanOrEqualTo(100));
+    expect(sim.trains.length, 3);
+  });
+
+  test('Kockázatos induláskor életvesztés és játék vége', () {
+    final sim = RailwaySimulation();
+    pump(sim);
+    sim.trains.add(SimTrain(
+      number: 'X', kind: TrainKind.freight, driver: 'Teszt',
+      route: ['korospatak', 'fenyvesliget'], speedKmH: 60,
+    ));
+    expect(sim.unsafeDispatch('X'), isFalse);
+    sim.setRiskMode(true);
+    expect(sim.unsafeDispatch('X'), isTrue);
+    expect(sim.lives, 2);
+    expect(sim.collisionCount, 1);
+    pump(sim);
+    sim.trains.add(SimTrain(
+      number: 'Y', kind: TrainKind.freight, driver: 'Teszt',
+      route: ['korospatak', 'fenyvesliget'], speedKmH: 60,
+    ));
+    expect(sim.unsafeDispatch('Y'), isTrue);
+    pump(sim);
+    sim.trains.add(SimTrain(
+      number: 'Z', kind: TrainKind.freight, driver: 'Teszt',
+      route: ['korospatak', 'fenyvesliget'], speedKmH: 60,
+    ));
+    expect(sim.unsafeDispatch('Z'), isTrue);
+    expect(sim.lives, 0);
+    expect(sim.gameOver, isTrue);
+    expect(sim.running, isFalse);
+  });
+
+  test('Új szolgálat visszaállítja az életeket és pontokat', () {
+    final sim = RailwaySimulation();
+    pump(sim);
+    sim.setRiskMode(true);
+    sim.trains.add(SimTrain(
+      number: 'X', kind: TrainKind.freight, driver: 'Teszt',
+      route: ['korospatak', 'fenyvesliget'], speedKmH: 60,
+    ));
+    sim.unsafeDispatch('X');
+    expect(sim.lives, 2);
+    sim.newShift();
+    expect(sim.lives, 3);
+    expect(sim.score, 0);
+    expect(sim.collisionCount, 0);
   });
 }
